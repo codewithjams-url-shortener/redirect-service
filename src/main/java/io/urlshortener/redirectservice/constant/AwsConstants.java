@@ -11,6 +11,11 @@ public class AwsConstants {
 	public static final String TABLE_LINKS = "links-table";
 
 	/**
+	 * Key identifying the SNS topic {@link io.urlshortener.eventcontracts.ClickEvent ClickEvent}s are published to.
+	 */
+	public static final String TOPIC_CLICK_EVENTS = "click-events-topic";
+
+	/**
 	 * Not instantiable.
 	 */
 	private AwsConstants() {
