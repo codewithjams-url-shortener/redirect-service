@@ -1,5 +1,6 @@
 package io.urlshortener.redirectservice.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.urlshortener.redirectservice.model.cache.CachedLink;
 import io.urlshortener.redirectservice.model.domainObject.ShortLink;
 import io.urlshortener.redirectservice.property.UrlRedirectionProperties;
@@ -39,6 +40,8 @@ class LinkLookupServiceTest {
 	@Mock
 	private ValueOperations<String, CachedLink> valueOperations;
 
+	private SimpleMeterRegistry meterRegistry;
+
 	private LinkLookupService linkLookupService;
 
 	@BeforeEach
@@ -48,12 +51,21 @@ class LinkLookupServiceTest {
 		cache.setTtl(TTL);
 		redirectionProperties.setCache(cache);
 
-		linkLookupService = new LinkLookupService(linkRepository, redisTemplate, redirectionProperties);
+		meterRegistry = new SimpleMeterRegistry();
+		linkLookupService = new LinkLookupService(linkRepository, redisTemplate, redirectionProperties, meterRegistry);
 		given(redisTemplate.opsForValue()).willReturn(valueOperations);
 	}
 
+	private double cacheHitCount() {
+		return meterRegistry.counter("cache.lookup", "result", "hit").count();
+	}
+
+	private double cacheMissCount() {
+		return meterRegistry.counter("cache.lookup", "result", "miss").count();
+	}
+
 	@Test
-	void getLink_shouldReturnCachedLink_whenCacheHasAPositiveEntry() {
+	void getLink_shouldReturnCachedLinkAndIncrementHitCounter_whenCacheHasAPositiveEntry() {
 		// Arrange
 		final ShortLink cachedLink = ShortLink.builder().shortCode(SHORT_CODE).longUrl("https://example.com").build();
 		given(valueOperations.get(CACHE_KEY)).willReturn(new CachedLink(true, cachedLink));
@@ -64,10 +76,12 @@ class LinkLookupServiceTest {
 		// Assert
 		assertThat(result).contains(cachedLink);
 		verify(linkRepository, never()).findByShortCode(anyString());
+		assertThat(cacheHitCount()).isEqualTo(1.0);
+		assertThat(cacheMissCount()).isZero();
 	}
 
 	@Test
-	void getLink_shouldReturnEmpty_whenCacheHasANegativeEntry() {
+	void getLink_shouldReturnEmptyAndIncrementHitCounter_whenCacheHasANegativeEntry() {
 		// Arrange
 		given(valueOperations.get(CACHE_KEY)).willReturn(new CachedLink(false, null));
 
@@ -77,10 +91,12 @@ class LinkLookupServiceTest {
 		// Assert
 		assertThat(result).isEmpty();
 		verify(linkRepository, never()).findByShortCode(anyString());
+		assertThat(cacheHitCount()).isEqualTo(1.0);
+		assertThat(cacheMissCount()).isZero();
 	}
 
 	@Test
-	void getLink_shouldReturnDbResultAndCacheIt_whenCacheMissesAndDbHasTheLink() {
+	void getLink_shouldReturnDbResultCacheItAndIncrementMissCounter_whenCacheMissesAndDbHasTheLink() {
 		// Arrange
 		final ShortLink dbLink = ShortLink.builder().shortCode(SHORT_CODE).longUrl("https://example.com").build();
 		given(valueOperations.get(CACHE_KEY)).willReturn(null);
@@ -92,10 +108,12 @@ class LinkLookupServiceTest {
 		// Assert
 		assertThat(result).contains(dbLink);
 		verify(valueOperations).set(CACHE_KEY, new CachedLink(true, dbLink), TTL);
+		assertThat(cacheMissCount()).isEqualTo(1.0);
+		assertThat(cacheHitCount()).isZero();
 	}
 
 	@Test
-	void getLink_shouldReturnEmptyAndCacheANegativeEntry_whenCacheMissesAndDbHasNoLink() {
+	void getLink_shouldReturnEmptyCacheANegativeEntryAndIncrementMissCounter_whenCacheMissesAndDbHasNoLink() {
 		// Arrange
 		given(valueOperations.get(CACHE_KEY)).willReturn(null);
 		given(linkRepository.findByShortCode(SHORT_CODE)).willReturn(Optional.empty());
@@ -106,6 +124,8 @@ class LinkLookupServiceTest {
 		// Assert
 		assertThat(result).isEmpty();
 		verify(valueOperations).set(CACHE_KEY, new CachedLink(false, null), TTL);
+		assertThat(cacheMissCount()).isEqualTo(1.0);
+		assertThat(cacheHitCount()).isZero();
 	}
 
 }

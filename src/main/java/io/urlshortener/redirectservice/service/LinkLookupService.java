@@ -1,10 +1,11 @@
 package io.urlshortener.redirectservice.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.urlshortener.redirectservice.model.cache.CachedLink;
 import io.urlshortener.redirectservice.model.domainObject.ShortLink;
 import io.urlshortener.redirectservice.property.UrlRedirectionProperties;
 import io.urlshortener.redirectservice.repository.LinkRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,6 @@ import java.util.Optional;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LinkLookupService {
 
 	/**
@@ -50,6 +50,42 @@ public class LinkLookupService {
 	private final UrlRedirectionProperties redirectionProperties;
 
 	/**
+	 * Counts Redis lookups that found an existing cache entry (positive or negative) - a cache hit.
+	 */
+	private final Counter cacheHitCounter;
+
+	/**
+	 * Counts Redis lookups that found no cache entry, requiring a DynamoDB fallback - a cache miss.
+	 */
+	private final Counter cacheMissCounter;
+
+	/**
+	 * Creates the service and registers its cache hit/miss counters.
+	 *
+	 * @param linkRepository        the repository to fall back to on a cache miss.
+	 * @param redisTemplate         the Redis-backed cache of lookups by short code.
+	 * @param redirectionProperties source of the configured cache TTL.
+	 * @param meterRegistry         the registry to register {@link #cacheHitCounter} and {@link #cacheMissCounter}
+	 *                              against.
+	 */
+	public LinkLookupService(final LinkRepository linkRepository,
+							 final RedisTemplate<String, CachedLink> redisTemplate,
+							 final UrlRedirectionProperties redirectionProperties,
+							 final MeterRegistry meterRegistry) {
+		this.linkRepository = linkRepository;
+		this.redisTemplate = redisTemplate;
+		this.redirectionProperties = redirectionProperties;
+		this.cacheHitCounter = Counter.builder("cache.lookup")
+				.description("Number of Redis lookups for a short code, tagged by hit/miss")
+				.tag("result", "hit")
+				.register(meterRegistry);
+		this.cacheMissCounter = Counter.builder("cache.lookup")
+				.description("Number of Redis lookups for a short code, tagged by hit/miss")
+				.tag("result", "miss")
+				.register(meterRegistry);
+	}
+
+	/**
 	 * Looks up a link by its short code, cache-first.
 	 *
 	 * @param shortCode the short code to look up.
@@ -62,6 +98,7 @@ public class LinkLookupService {
 
 		if (Objects.nonNull(cached)) {
 
+			cacheHitCounter.increment();
 			log.atDebug()
 					.addKeyValue("shortCode", shortCode)
 					.addKeyValue("key", key)
@@ -84,6 +121,7 @@ public class LinkLookupService {
 			}
 
 		} else {
+			cacheMissCounter.increment();
 			log.atDebug()
 					.addKeyValue("shortCode", shortCode)
 					.addKeyValue("key", key)
