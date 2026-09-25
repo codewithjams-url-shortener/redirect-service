@@ -1,0 +1,16 @@
+parameters:
+  - $ref: "../openapi.yaml#/components/parameters/ShortCodePathParam"
+get:
+  tags:
+    - Redirect
+  operationId: redirect
+  summary: Resolve a short code and redirect to its long URL
+  responses:
+    "302":
+      description: Redirect issued to the long URL
+      headers:
+        Location:
+          description: The destination URL to redirect to.
+          schema:
+            type: string
+            format: uri

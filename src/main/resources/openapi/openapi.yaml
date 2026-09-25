@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: redirect-service API
+  version: 0.1.0
+paths:
+  /{shortCode}:
+    $ref: "./paths/redirect.yaml"
+components:
+  schemas:
+    ErrorResponse:
+      $ref: "./schemas/ErrorResponse.yaml"
+  parameters:
+    ShortCodePathParam:
+      in: path
+      name: shortCode
+      description: Short code to resolve
+      required: true
+      schema:
+        type: string
+        minLength: 3
