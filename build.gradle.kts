@@ -1,3 +1,5 @@
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
 plugins {
 	java
 	id("org.springframework.boot") version "3.5.6"
@@ -23,6 +25,15 @@ dependencyManagement {
 	imports {
 		mavenBom("org.testcontainers:testcontainers-bom:1.21.4")
 	}
+}
+
+// Deliberately isolated from `main`, matching url-service's own integrationTest source set: no
+// compile-time dependency on redirect-service's own classes. Both redirect-service and url-service
+// (needed here only to create/delete the Links rows redirect-service has no write endpoint for) are
+// treated as HTTP black boxes - "local" launches their real built jars as separate OS processes (see
+// LocalEnvironmentConfig), "deployed" just points at configured URLs.
+sourceSets {
+	create("integrationTest")
 }
 
 dependencies {
@@ -52,6 +63,16 @@ dependencies {
 
 	testImplementation("io.floci:testcontainers-floci:1.15.0")
 	testImplementation("org.testcontainers:junit-jupiter")
+
+	"integrationTestImplementation"("org.springframework.boot:spring-boot-starter-web")
+	"integrationTestImplementation"("org.springframework.boot:spring-boot-starter-test")
+	"integrationTestImplementation"("software.amazon.awssdk:dynamodb:2.54.13")
+	"integrationTestImplementation"("software.amazon.awssdk:sns:2.54.13")
+	"integrationTestImplementation"("software.amazon.awssdk:sqs:2.54.13")
+	"integrationTestImplementation"("io.floci:testcontainers-floci:1.15.0")
+	"integrationTestImplementation"("org.testcontainers:testcontainers")
+	"integrationTestImplementation"("org.testcontainers:junit-jupiter")
+	"integrationTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<Test> {
@@ -81,4 +102,35 @@ sourceSets.main {
 
 tasks.compileJava {
 	dependsOn(tasks.openApiGenerate)
+}
+
+tasks.register<Test>("localIntegrationTest") {
+	description = "Runs the redirect-service integration tests with a Testcontainers-backed floci " +
+			"and Redis instance, launching both the built redirect-service and url-service jars as " +
+			"separate processes (spring.profiles.active=local)."
+	group = "verification"
+	dependsOn(tasks.named("bootJar"))
+	testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+	classpath = sourceSets["integrationTest"].runtimeClasspath
+	systemProperty("spring.profiles.active", "local")
+	systemProperty("integration-test.app-jar", tasks.named<BootJar>("bootJar").get().archiveFile.get().asFile.path)
+	// url-service lives in a separate repository/checkout, so its built jar can't be reached via a
+	// Gradle task dependency the way redirect-service's own bootJar above can. Defaults to the sibling
+	// checkout layout this repo is normally cloned into; override with -PurlServiceJar=... if yours
+	// differs (e.g. a CI workspace).
+	val urlServiceJar = (project.findProperty("urlServiceJar") as String?)
+			?: "$projectDir/../url-service/build/libs/url-service-0.1.0.jar"
+	systemProperty("integration-test.url-service-app-jar", urlServiceJar)
+}
+
+tasks.register<Test>("integrationTest") {
+	description = "Runs the redirect-service integration tests against already-deployed redirect-service " +
+			"and url-service instances (spring.profiles.active=deployed). Pass the targets with " +
+			"-PbaseUrl=https://... -PurlServiceBaseUrl=https://..."
+	group = "verification"
+	testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+	classpath = sourceSets["integrationTest"].runtimeClasspath
+	systemProperty("spring.profiles.active", "deployed")
+	systemProperty("integration-test.base-url", (project.findProperty("baseUrl") as String?) ?: "")
+	systemProperty("integration-test.url-service-base-url", (project.findProperty("urlServiceBaseUrl") as String?) ?: "")
 }
