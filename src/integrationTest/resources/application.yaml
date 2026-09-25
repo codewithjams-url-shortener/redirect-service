@@ -1,0 +1,14 @@
+# Tunable constants for the integrationTest source set. Kept separate from run-specific values
+# (integration-test.app-jar, integration-test.url-service-app-jar, integration-test.base-url,
+# integration-test.url-service-base-url, integration-test.click-events-topic-arn), which are supplied
+# per-invocation via Gradle system properties instead, since they're targets for a given run rather than
+# fixed constants.
+integration-test:
+  local:
+    links-table-name: Links
+    links-table-partition-key: shortCode
+    click-events-topic-name: click-events
+    click-events-queue-name: click-events-it
+    redis-image: redis:7-alpine
+    health-check-timeout: 30s
+    health-check-poll-interval: 500ms
