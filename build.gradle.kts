@@ -34,6 +34,7 @@ dependencies {
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 	implementation("software.amazon.awssdk:dynamodb:2.54.13")
+	implementation("software.amazon.awssdk:sns:2.54.13")
 	implementation("io.url-shortener:service-common:0.1.0")
 	implementation("io.url-shortener:event-contracts:0.1.0")
 

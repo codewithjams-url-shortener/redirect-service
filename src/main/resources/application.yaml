@@ -39,6 +39,10 @@ aws:
     endpoint-override: http://localhost:4566
     tables:
       links-table: "Links"
+  sns:
+    endpoint-override: http://localhost:4566
+    topics:
+      click-events-topic: "arn:aws:sns:us-west-2:000000000000:click-events"
 
 url-redirection:
   cache:

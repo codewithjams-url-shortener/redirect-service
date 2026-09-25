@@ -12,6 +12,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.sns.SnsAsyncClient;
 
 import java.net.URI;
 import java.util.Objects;
@@ -96,6 +97,31 @@ public class AwsConfig {
 				.addKeyValue("endpoint-override.present", StringUtils.hasText(url))
 				.log("Bean: DynamoDbClient created");
 		return DynamoDbClient.builder()
+				.region(region)
+				.endpointOverride(endpoint)
+				.credentialsProvider(credentialsProvider)
+				.build();
+	}
+
+	/**
+	 * Builds the SNS client used to publish {@code ClickEvent}s.
+	 *
+	 * @param region              the AWS region to target.
+	 * @param credentialsProvider the credentials to authenticate with.
+	 * @return an {@link SnsAsyncClient}, pointed at the configured endpoint override when present
+	 * (e.g. for local development against floci).
+	 */
+	@Bean
+	public SnsAsyncClient snsAsyncClient(final Region region, final AwsCredentialsProvider credentialsProvider) {
+		final String url = awsProperties.getSns().getEndpointOverride();
+		final URI endpoint = URI.create(url);
+		log.atDebug()
+				.addKeyValue("bean", SnsAsyncClient.class.getSimpleName())
+				.addKeyValue("region.present", Objects.nonNull(region))
+				.addKeyValue("credentialsProvider.present", Objects.nonNull(credentialsProvider))
+				.addKeyValue("endpoint-override.present", StringUtils.hasText(url))
+				.log("Bean: SnsAsyncClient created");
+		return SnsAsyncClient.builder()
 				.region(region)
 				.endpointOverride(endpoint)
 				.credentialsProvider(credentialsProvider)

@@ -31,6 +31,11 @@ public class AwsProperties {
 	private DynamoDb dynamoDb;
 
 	/**
+	 * SNS-specific configuration.
+	 */
+	private Sns sns;
+
+	/**
 	 * Static AWS credentials, configured directly rather than resolved via the default provider chain.
 	 */
 	@Getter
@@ -68,6 +73,28 @@ public class AwsProperties {
 		 * actual table names.
 		 */
 		private Map<String, String> tables;
+
+	}
+
+	/**
+	 * SNS-specific configuration: an optional local endpoint override, and the map of logical topic names (see
+	 * {@link io.urlshortener.redirectservice.constant.AwsConstants AwsConstants}) to their actual configured topic
+	 * ARNs.
+	 */
+	@Getter
+	@Setter
+	public static class Sns {
+
+		/**
+		 * Local SNS endpoint to target instead of the real AWS endpoint, if set (e.g. floci).
+		 */
+		private String endpointOverride;
+
+		/**
+		 * Maps logical topic keys (see {@link io.urlshortener.redirectservice.constant.AwsConstants AwsConstants}) to
+		 * actual topic ARNs.
+		 */
+		private Map<String, String> topics;
 
 	}
 
