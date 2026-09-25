@@ -1,6 +1,10 @@
 spring:
   application:
     name: redirect-service
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 management:
   endpoint:
@@ -25,3 +29,17 @@ management:
 
 server:
   port: 5234
+
+aws:
+  region: us-west-2
+  credential:
+    access-key: test
+    secret-key: test
+  dynamodb:
+    endpoint-override: http://localhost:4566
+    tables:
+      links-table: "Links"
+
+url-redirection:
+  cache:
+    ttl: 10m
