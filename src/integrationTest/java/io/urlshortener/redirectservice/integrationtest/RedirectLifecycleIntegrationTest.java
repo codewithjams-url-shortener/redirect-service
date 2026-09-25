@@ -147,33 +147,60 @@ public class RedirectLifecycleIntegrationTest {
 	}
 
 	@Test
-	void redirect_shouldServeFromCache_whenUnderlyingLinkWasDeletedAfterFirstRedirect() {
+	void redirect_shouldIncrementCacheHitMetric_whenSameShortCodeIsRequestedTwice() {
 
 		// Arrange
-		final String longUrl = "https://example.com/cached-page";
+		final String longUrl = "https://example.com/cache-hit-metric";
 		final JsonNode created = createLink(longUrl);
 		final String shortCode = created.get(LinksApiConstants.FIELD_SHORT_CODE).asText();
-		final String managementToken = created.get(LinksApiConstants.FIELD_MANAGEMENT_TOKEN).asText();
+		redirect(shortCode); // first redirect: cache miss, populates the cache
+		final double hitCountBeforeSecondRedirect = cacheHitCount();
 
 		// Act
-		// First redirect: cache miss, served from and cached off DynamoDB.
-		final ResponseEntity<Void> firstResponse = redirect(shortCode);
-		deleteLink(shortCode, managementToken);
-		// Second redirect: the link no longer exists in DynamoDB at all, so a 302 here can only be
-		// explained by the first request's cache entry still being served.
 		final ResponseEntity<Void> secondResponse = redirect(shortCode);
 
 		// Assert
-		assertThat(firstResponse.getStatusCode())
-				.as("First GET /%s (cache miss) should return 302 Found", shortCode)
-				.isEqualTo(HttpStatus.FOUND);
 		assertThat(secondResponse.getStatusCode())
-				.as("Second GET /%s, after the underlying link was deleted, should still return 302 Found "
-						+ "(served from cache)", shortCode)
+				.as("Second GET /%s should return 302 Found", shortCode)
 				.isEqualTo(HttpStatus.FOUND);
-		assertThat(secondResponse.getHeaders().getLocation())
-				.as("Cached redirect should still point at the original longUrl")
-				.hasToString(longUrl);
+		// A metric-based proof rather than a delete-and-redirect one: any DynamoDB write is exactly what
+		// LinksStreamConsumer reacts to, so proving a cache hit via "the record was deleted but the
+		// redirect still succeeds" would itself race that consumer. Reading the cache.lookup counter
+		// (see #8) sidesteps that entirely - nothing here writes to DynamoDB at all.
+		assertThat(cacheHitCount())
+				.as("cache.lookup{result=\"hit\"} should increment by exactly 1 after a second redirect to the "
+						+ "same short code, proving it was served from Redis rather than re-fetched from DynamoDB")
+				.isEqualTo(hitCountBeforeSecondRedirect + 1);
+
+	}
+
+	@Test
+	void redirect_shouldReturn404_whenLinkIsDeletedAndStreamConsumerInvalidatesCache() throws InterruptedException {
+
+		// Arrange
+		final String longUrl = "https://example.com/stream-invalidated-page";
+		final JsonNode created = createLink(longUrl);
+		final String shortCode = created.get(LinksApiConstants.FIELD_SHORT_CODE).asText();
+		final String managementToken = created.get(LinksApiConstants.FIELD_MANAGEMENT_TOKEN).asText();
+		redirect(shortCode); // populates the cache
+		// Drain this redirect's own ClickEvent before triggering a second one for the same shortCode below,
+		// so the later assertClickEventPublished(shortCode, NOT_FOUND) can't pick up this RESOLVED one instead
+		// (the queue doesn't guarantee delivery order between the two).
+		assertClickEventPublished(shortCode, ClickEventConstants.OUTCOME_RESOLVED);
+		deleteLink(shortCode, managementToken);
+		// LinksStreamConsumer polls roughly every second; give it a few cycles to actually process the
+		// DynamoDB REMOVE event and invalidate the Redis entry, rather than relying on the 10-minute TTL
+		// safety net (see ADR-0012) to eventually mask a broken consumer.
+		Thread.sleep(4_000);
+
+		// Act
+		final Throwable thrown = catchThrowable(() -> redirect(shortCode));
+
+		// Assert
+		assertHttpStatus(thrown, HttpStatus.NOT_FOUND,
+				("GET /%s after the underlying link was deleted and the stream consumer has had time to "
+						+ "invalidate the cache should return 404 Not Found").formatted(shortCode));
+		assertClickEventPublished(shortCode, ClickEventConstants.OUTCOME_NOT_FOUND);
 
 	}
 
@@ -209,6 +236,23 @@ public class RedirectLifecycleIntegrationTest {
 				.uri("/{shortCode}", shortCode)
 				.retrieve()
 				.toBodilessEntity();
+	}
+
+	private double cacheHitCount() {
+		final String prometheusBody = redirectApiClient.get()
+				.uri("/actuator/prometheus")
+				.retrieve()
+				.body(String.class);
+		return parseCounterValue(prometheusBody, "cache_lookup_total", "result=\"hit\"");
+	}
+
+	private double parseCounterValue(final String prometheusBody, final String metricName, final String tagMatch) {
+		return prometheusBody.lines()
+				.filter(line -> line.startsWith(metricName + "{") && line.contains(tagMatch))
+				.findFirst()
+				.map(line -> line.substring(line.lastIndexOf(' ') + 1))
+				.map(Double::parseDouble)
+				.orElse(0.0);
 	}
 
 	private void assertClickEventPublished(final String shortCode, final String expectedOutcome) {

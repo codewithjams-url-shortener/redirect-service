@@ -12,6 +12,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.streams.DynamoDbStreamsClient;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
 
 import java.net.URI;
@@ -122,6 +123,24 @@ public class AwsConfig {
 				.addKeyValue("endpoint-override.present", StringUtils.hasText(url))
 				.log("Bean: SnsAsyncClient created");
 		return SnsAsyncClient.builder()
+				.region(region)
+				.endpointOverride(endpoint)
+				.credentialsProvider(credentialsProvider)
+				.build();
+	}
+
+	@Bean
+	public DynamoDbStreamsClient dynamoDbStreamsClient(final Region region,
+													   final AwsCredentialsProvider credentialsProvider) {
+		final String url = awsProperties.getDynamoDb().getEndpointOverride();
+		final URI endpoint = URI.create(url);
+		log.atDebug()
+				.addKeyValue("bean", DynamoDbStreamsClient.class.getSimpleName())
+				.addKeyValue("region.present", Objects.nonNull(region))
+				.addKeyValue("credentialsProvider.present", Objects.nonNull(credentialsProvider))
+				.addKeyValue("endpoint-override.present", StringUtils.hasText(url))
+				.log("Bean: DynamoDbStreamsClient created");
+		return DynamoDbStreamsClient.builder()
 				.region(region)
 				.endpointOverride(endpoint)
 				.credentialsProvider(credentialsProvider)
