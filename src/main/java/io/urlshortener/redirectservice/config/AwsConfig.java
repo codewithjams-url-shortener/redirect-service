@@ -1,0 +1,105 @@
+package io.urlshortener.redirectservice.config;
+
+import io.urlshortener.redirectservice.property.AwsProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+
+import java.net.URI;
+import java.util.Objects;
+
+/**
+ * Provides the AWS SDK beans (region, credentials, and the DynamoDB client) used throughout redirect-service,
+ * configured from {@link AwsProperties}.
+ */
+@Slf4j
+@Configuration
+@RequiredArgsConstructor
+public class AwsConfig {
+
+	/**
+	 * Source of the {@code aws.*} configuration values used to build the beans below.
+	 */
+	private final AwsProperties awsProperties;
+
+	/**
+	 * Builds the AWS region bean from configuration.
+	 *
+	 * @return the AWS {@link Region} configured via {@code aws.region}.
+	 */
+	@Bean
+	public Region region() {
+		final String region = awsProperties.getRegion();
+		log.atDebug()
+				.addKeyValue("bean", Region.class.getSimpleName())
+				.addKeyValue("region.present", StringUtils.hasText(region))
+				.log("Bean: Region created");
+		return Region.of(region);
+	}
+
+	/**
+	 * Builds the static credentials bean from configuration.
+	 *
+	 * @return static {@link AwsCredentials} built from the configured access/secret key pair.
+	 */
+	@Bean
+	public AwsCredentials awsCredentials() {
+		final String accessKey = awsProperties.getCredential().getAccessKey();
+		final String secretKey = awsProperties.getCredential().getSecretKey();
+		log.atDebug()
+				.addKeyValue("bean", AwsCredentials.class.getSimpleName())
+				.addKeyValue("accessKey.present", StringUtils.hasText(accessKey))
+				.addKeyValue("secretKey.present", StringUtils.hasText(secretKey))
+				.log("Bean: AwsCredentials created");
+		return AwsBasicCredentials.create(accessKey, secretKey);
+	}
+
+	/**
+	 * Wraps the static credentials bean in a provider, as required by the AWS SDK client builders.
+	 *
+	 * @param credentials the AWS credentials to wrap.
+	 * @return an {@link AwsCredentialsProvider} that always returns {@code credentials}.
+	 */
+	@Bean
+	public AwsCredentialsProvider credentialsProvider(final AwsCredentials credentials) {
+		log.atDebug()
+				.addKeyValue("bean", AwsCredentialsProvider.class.getSimpleName())
+				.addKeyValue("credentials.present", Objects.nonNull(credentials))
+				.log("Bean: AwsCredentialsProvider created");
+		return StaticCredentialsProvider.create(credentials);
+	}
+
+	/**
+	 * Builds the DynamoDB client used by the repository layer.
+	 *
+	 * @param region              the AWS region to target.
+	 * @param credentialsProvider the credentials to authenticate with.
+	 * @return a {@link DynamoDbClient}, pointed at the configured endpoint override when present
+	 * (e.g. for local development against floci).
+	 */
+	@Bean
+	public DynamoDbClient dynamoDbClient(final Region region, final AwsCredentialsProvider credentialsProvider) {
+		final String url = awsProperties.getDynamoDb().getEndpointOverride();
+		final URI endpoint = URI.create(url);
+		log.atDebug()
+				.addKeyValue("bean", DynamoDbClient.class.getSimpleName())
+				.addKeyValue("region.present", Objects.nonNull(region))
+				.addKeyValue("credentialsProvider.present", Objects.nonNull(credentialsProvider))
+				.addKeyValue("endpoint-override.present", StringUtils.hasText(url))
+				.log("Bean: DynamoDbClient created");
+		return DynamoDbClient.builder()
+				.region(region)
+				.endpointOverride(endpoint)
+				.credentialsProvider(credentialsProvider)
+				.build();
+	}
+
+}
