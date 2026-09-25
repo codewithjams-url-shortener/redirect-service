@@ -22,6 +22,8 @@ import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.model.StreamSpecification;
+import software.amazon.awssdk.services.dynamodb.model.StreamViewType;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.CreateTopicRequest;
 import software.amazon.awssdk.services.sns.model.CreateTopicResponse;
@@ -108,6 +110,12 @@ public class LocalEnvironmentConfig {
 					.keySchema(schemaElement)
 					.attributeDefinitions(attributeDefinition)
 					.billingMode(BillingMode.PAY_PER_REQUEST)
+					// NEW_AND_OLD_IMAGES to match production (see ADR-0003/ADR-0012) - redirect-service's own
+					// LinksStreamConsumer needs a real stream to consume from.
+					.streamSpecification(StreamSpecification.builder()
+							.streamEnabled(true)
+							.streamViewType(StreamViewType.NEW_AND_OLD_IMAGES)
+							.build())
 					.build());
 		}
 	}

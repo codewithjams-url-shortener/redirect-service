@@ -44,6 +44,8 @@ dependencies {
 	implementation("io.micrometer:micrometer-registry-prometheus")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+	// DynamoDbStreamsClient ships bundled inside this same artifact - AWS SDK v2 has no separate
+	// dynamodb-streams module.
 	implementation("software.amazon.awssdk:dynamodb:2.54.13")
 	implementation("software.amazon.awssdk:sns:2.54.13")
 	implementation("io.url-shortener:service-common:0.1.0")
