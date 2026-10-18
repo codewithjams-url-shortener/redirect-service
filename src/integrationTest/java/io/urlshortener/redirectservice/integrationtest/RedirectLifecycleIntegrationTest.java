@@ -204,6 +204,31 @@ public class RedirectLifecycleIntegrationTest {
 
 	}
 
+	@Test
+	void redirect_shouldPublishTheTraceContextAsMessageAttributes_whenLinkExists() {
+
+		// Arrange
+		final JsonNode created = createLink("https://example.com/traced-page");
+		final String shortCode = created.get(LinksApiConstants.FIELD_SHORT_CODE).asText();
+
+		// Act
+		redirect(shortCode);
+		final Message message = pollForClickMessage(shortCode);
+
+		// Assert
+		assertThat(message)
+				.as("A ClickEvent for shortCode '%s' should have been published", shortCode)
+				.isNotNull();
+		final String traceParent = message.messageAttributes().get("traceparent").stringValue();
+		assertThat(traceParent)
+				.as("traceparent should be a valid W3C trace context, so a consumer can continue the trace")
+				.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
+		// The correlation ID is the trace ID, the same value the structured logs carry as traceId.
+		assertThat(message.messageAttributes().get("correlationId").stringValue())
+				.isEqualTo(traceParent.split("-")[1]);
+
+	}
+
 	private JsonNode createLink(final String longUrl) {
 		return linksApiClient.post()
 				.uri("/links")
@@ -266,12 +291,19 @@ public class RedirectLifecycleIntegrationTest {
 	}
 
 	private JsonNode pollForClickEvent(final String shortCode) {
+		final Message message = pollForClickMessage(shortCode);
+		return message == null ? null : parseClickEvent(message.body());
+	}
+
+	private Message pollForClickMessage(final String shortCode) {
 		final Instant deadline = Instant.now().plusSeconds(10);
 		while (Instant.now().isBefore(deadline)) {
 			final ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
 					.queueUrl(clickEventsQueueUrl)
 					.maxNumberOfMessages(10)
 					.waitTimeSeconds(2)
+					// The trace context travels as message attributes, which SQS only returns when asked for.
+					.messageAttributeNames("All")
 					.build();
 			final List<Message> messages = clickEventsSqsClient.receiveMessage(receiveMessageRequest).messages();
 			for (final Message message : messages) {
@@ -282,7 +314,7 @@ public class RedirectLifecycleIntegrationTest {
 							.receiptHandle(message.receiptHandle())
 							.build();
 					clickEventsSqsClient.deleteMessage(deleteMessageRequest);
-					return event;
+					return message;
 				}
 			}
 		}
