@@ -15,6 +15,7 @@ import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
@@ -205,6 +206,9 @@ public class LocalEnvironmentConfig {
 				"-Daws.credential.secret-key=%s".formatted(floci.getSecretKey()),
 				"-Daws.dynamodb.tables.links-table=%s".formatted(LocalTestSettings.linksTableName()),
 				"-Daws.sns.topics.click-events-topic=%s".formatted(clickEventsTopicArn),
+				"-Daws.cloudwatch.endpoint-override=%s".formatted(floci.getEndpoint()),
+				// Publish every second instead of every minute, so the tests need not wait a minute to see the counts.
+				"-Durl-shortener.http-metrics.publish-interval=PT1S",
 				"-Dspring.data.redis.host=%s".formatted(redis.getHost()),
 				"-Dspring.data.redis.port=%s".formatted(redis.getMappedPort(6379)),
 				"-jar", appJarPath
@@ -233,6 +237,31 @@ public class LocalEnvironmentConfig {
 		final Process process = start(processBuilder);
 		waitUntilHealthy(port, process);
 		return new LocalServiceInstance(process, port);
+	}
+
+	/**
+	 * Reads CloudWatch from the same floci the launched redirect-service publishes its metrics to.
+	 */
+	@Bean(destroyMethod = "close")
+	public CloudWatchClient flociCloudWatchClient() {
+		return CloudWatchClient.builder()
+				.endpointOverride(URI.create(floci.getEndpoint()))
+				.region(Region.of(floci.getRegion()))
+				.credentialsProvider(credentialsProvider())
+				.build();
+	}
+
+	/**
+	 * Plants a link item that cannot be looked up, straight into floci's DynamoDB, so a test can make the launched
+	 * redirect-service answer with a genuine 500 without any test-only hook in the application.
+	 */
+	@Bean
+	public CorruptLinkSeeder corruptLinkSeeder() {
+		return new CorruptLinkSeeder(
+				LocalEnvironmentConfig::buildDynamoDbClient,
+				LocalTestSettings.linksTableName(),
+				LocalTestSettings.linksTablePartitionKey()
+		);
 	}
 
 	@Bean

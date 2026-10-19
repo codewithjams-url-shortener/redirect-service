@@ -68,8 +68,9 @@ dependencies {
 	// dynamodb-streams module.
 	implementation("software.amazon.awssdk:dynamodb:2.54.13")
 	implementation("software.amazon.awssdk:sns:2.54.13")
-	implementation("io.url-shortener:service-common:0.1.0")
-	implementation("io.url-shortener:event-contracts:0.1.0")
+	implementation("software.amazon.awssdk:cloudwatch:2.54.13")
+	implementation("io.url-shortener:service-common:0.1.1")
+	implementation("io.url-shortener:event-contracts:0.1.1")
 
 	// Required by openapi-generator's "spring" output (interfaceOnly): the generated API
 	// interface uses Swagger's OpenAPI 3 annotations, and generated models use JsonNullable
@@ -91,6 +92,8 @@ dependencies {
 	"integrationTestImplementation"("software.amazon.awssdk:dynamodb:2.54.13")
 	"integrationTestImplementation"("software.amazon.awssdk:sns:2.54.13")
 	"integrationTestImplementation"("software.amazon.awssdk:sqs:2.54.13")
+	"integrationTestImplementation"("software.amazon.awssdk:cloudwatch:2.54.13")
+	"integrationTestImplementation"("io.url-shortener:service-common:0.1.1")
 	"integrationTestImplementation"("io.floci:testcontainers-floci:1.15.0")
 	"integrationTestImplementation"("org.testcontainers:testcontainers")
 	"integrationTestImplementation"("org.testcontainers:junit-jupiter")

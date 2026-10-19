@@ -50,7 +50,14 @@ aws:
     endpoint-override: http://localhost:4566
     topics:
       click-events-topic: "arn:aws:sns:us-west-2:000000000000:click-events"
+  cloudwatch:
+    endpoint-override: http://localhost:4566
 
 url-redirection:
   cache:
     ttl: 10m
+
+url-shortener:
+  http-metrics:
+    enabled: true
+    publish-interval: PT1M
